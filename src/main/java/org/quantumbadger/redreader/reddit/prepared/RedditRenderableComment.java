@@ -20,9 +20,11 @@ package org.quantumbadger.redreader.reddit.prepared;
 import android.content.Context;
 import android.graphics.Color;
 import android.view.View;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+
 import org.quantumbadger.redreader.R;
 import org.quantumbadger.redreader.account.RedditAccountManager;
 import org.quantumbadger.redreader.activities.BaseActivity;
@@ -35,6 +37,7 @@ import org.quantumbadger.redreader.common.PrefsUtility;
 import org.quantumbadger.redreader.common.RRThemeAttributes;
 import org.quantumbadger.redreader.common.ScreenreaderPronunciation;
 import org.quantumbadger.redreader.common.StringUtils;
+import org.quantumbadger.redreader.common.UriString;
 import org.quantumbadger.redreader.common.time.TimeFormatHelper;
 import org.quantumbadger.redreader.common.time.TimestampUTC;
 import org.quantumbadger.redreader.reddit.api.RedditAPICommentAction;
@@ -42,8 +45,6 @@ import org.quantumbadger.redreader.reddit.kthings.RedditComment;
 import org.quantumbadger.redreader.reddit.kthings.RedditIdAndType;
 import org.quantumbadger.redreader.reddit.kthings.UrlEncodedString;
 import org.quantumbadger.redreader.reddit.things.RedditThingWithIdAndType;
-
-import java.net.URI;
 
 public class RedditRenderableComment
 		implements RedditRenderableInboxItem, RedditThingWithIdAndType {
@@ -55,6 +56,7 @@ public class RedditRenderableComment
 	private final boolean mShowScore;
 	private final boolean mShowSubreddit;
 	private final boolean mNeverAutoCollapse;
+	private boolean isBlockedUser = false;
 
 	public RedditRenderableComment(
 			final RedditParsedComment comment,
@@ -72,6 +74,10 @@ public class RedditRenderableComment
 		mShowScore = showScore;
 		mShowSubreddit = showSubreddit;
 		mNeverAutoCollapse = neverAutoCollapse;
+	}
+
+	public void setBlockedUser(final boolean blocked) {
+		isBlockedUser = blocked;
 	}
 
 	private int computeScore(final RedditChangeDataManager changeDataManager) {
@@ -143,6 +149,13 @@ public class RedditRenderableComment
 			} else if("admin".equals(rawComment.getDistinguished())) {
 				setBackgroundColour = true;
 				backgroundColour = Color.rgb(170, 0, 0);
+
+			} else if(rawComment.getAuthor().getDecoded().equalsIgnoreCase(
+					mCurrentCanonicalUserName)) {
+				if (PrefsUtility.pref_appearance_highlight_own_username()){
+					setBackgroundColour = true;
+					backgroundColour = Color.rgb(0xEF, 0x6C, 0x00);
+				}
 			}
 
 			if(setBackgroundColour) {
@@ -163,6 +176,10 @@ public class RedditRenderableComment
 						theme.rrCommentHeaderAuthorCol,
 						0,
 						1f);
+			}
+			if (isBlockedUser) {
+				sb.append(" [" + context.getString(R.string.blocked_user_comment) + "]",
+				BetterSSB.FOREGROUND_COLOR, Color.RED, 0, 1f);
 			}
 		}
 
@@ -559,9 +576,9 @@ public class RedditRenderableComment
 	@Override
 	public void handleInboxClick(final BaseActivity activity) {
 		// TODO nullability
-		final URI commentContext
+		final UriString commentContext
 				= Constants.Reddit.getUri(mComment.getRawComment().getContext().getDecoded());
-		LinkHandler.onLinkClicked(activity, commentContext.toString());
+		LinkHandler.onLinkClicked(activity, commentContext);
 	}
 
 	@Override
@@ -614,6 +631,11 @@ public class RedditRenderableComment
 
 		if(collapsed != null) {
 			return collapsed;
+		}
+
+		//Always collapse blocked users
+		if (isBlockedUser) {
+			return true;
 		}
 
 		if(mNeverAutoCollapse) {

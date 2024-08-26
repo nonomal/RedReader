@@ -20,7 +20,9 @@ package org.quantumbadger.redreader.fragments;
 import android.content.Context;
 import android.os.Bundle;
 import android.widget.LinearLayout;
+
 import androidx.annotation.NonNull;
+
 import org.quantumbadger.redreader.R;
 import org.quantumbadger.redreader.activities.BaseActivity;
 import org.quantumbadger.redreader.common.time.TimestampUTC;
@@ -118,6 +120,14 @@ public final class UserPropertiesDialog extends PropertiesDialog {
 					context,
 					R.string.userprofile_tag_suspended,
 					user.is_suspended ? R.string.general_true : R.string.general_false,
+					false));
+		}
+
+		if (user.is_blocked != null) {
+			items.addView(propView(
+					context,
+					R.string.userprofile_tag_blocked,
+					user.is_blocked ? R.string.general_true : R.string.general_false,
 					false));
 		}
 

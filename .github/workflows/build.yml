@@ -1,6 +1,7 @@
 name: CI
 
 on:
+    workflow_dispatch:
     push:
     pull_request:
     schedule:
@@ -10,11 +11,28 @@ jobs:
     ci:
         runs-on: ubuntu-latest
         steps:
-            -   uses: actions/checkout@v2
-            -   uses: gradle/wrapper-validation-action@v1
+            -   uses: actions/checkout@v4
+
+            -   name: Set up Java 17
+                uses: actions/setup-java@v4
+                with:
+                    distribution: temurin
+                    java-version: 17
+
+            -   name: Validate Gradle wrapper
+                uses: gradle/actions/wrapper-validation@v3
+
+            -   name: Set up Gradle
+                uses: gradle/actions/setup-gradle@v3
+                with:
+                    cache-read-only: ${{ github.event_name == 'pull_request' }}
 
             -   name: Install NDK
-                run: echo "y" | sudo ${ANDROID_HOME}/tools/bin/sdkmanager --install "ndk;23.1.7779620" --sdk_root=${ANDROID_SDK_ROOT}
+                run: |
+                    SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+                    NDK_VERSION="$(yq .versions.ndk gradle/libs.versions.toml)"
+                    echo "Installing NDK ${NDK_VERSION}"
+                    echo "y" | "$SDKMANAGER" "ndk;$NDK_VERSION" --sdk_root="${ANDROID_SDK_ROOT}"
 
             -   name: Run release build
                 run: ./gradlew assembleRelease
@@ -23,7 +41,7 @@ jobs:
                 run: ./gradlew assembleDebug
 
             -   name: Upload artifact to GitHub
-                uses: actions/upload-artifact@v2
+                uses: actions/upload-artifact@v4
                 with:
                     name: RedReader-debug.apk
                     path: build/outputs/apk/debug/RedReader-debug.apk
@@ -33,3 +51,9 @@ jobs:
 
             -   name: Run checkstyle
                 run: ./gradlew checkstyle --stacktrace --info
+
+            -   name: Android Lint
+                run: ./gradlew lint
+
+            -   name: Unit tests
+                run: ./gradlew test

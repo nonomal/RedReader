@@ -22,6 +22,7 @@ import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import org.quantumbadger.redreader.common.LinkHandler
+import org.quantumbadger.redreader.common.UriString
 import org.quantumbadger.redreader.reddit.things.RedditThingWithIdAndType
 import org.quantumbadger.redreader.reddit.url.PostCommentListingURL
 
@@ -33,6 +34,7 @@ import org.quantumbadger.redreader.reddit.url.PostCommentListingURL
 data class RedditComment(
 	val body: UrlEncodedString? = null,
 	val body_html: UrlEncodedString? = null,
+	val COLLAPSED_REASON_BLOCKED_AUTHOR: String = "BLOCKED_AUTHOR",
 
 	val author: UrlEncodedString? = null,
 	val subreddit: UrlEncodedString? = null,
@@ -66,7 +68,9 @@ data class RedditComment(
 
 	val distinguished: String? = null, // TODO enum? Test unknown values
 
-	val stickied: Boolean = false
+	val stickied: Boolean = false,
+
+	val collapsed_reason_code: String? = null
 
 ) : Parcelable, RedditThingWithIdAndType {
 
@@ -100,11 +104,19 @@ data class RedditComment(
 		)
 	}
 
-	fun computeAllLinks(): Set<String> {
+	fun computeAllLinks(): Set<UriString> {
 		return body_html?.decoded?.run { LinkHandler.computeAllLinks(this) } ?: emptySet()
+	}
+
+	fun computeAllLinksString(): List<String> {
+		return computeAllLinks().map { it.value }
 	}
 
 	fun wasEdited(): Boolean = edited != RedditFieldEdited.Bool(false)
 
 	fun isControversial(): Boolean = controversiality == 1
+
+	fun isBlockedByUser(): Boolean {
+		return COLLAPSED_REASON_BLOCKED_AUTHOR == collapsed_reason_code
+	}
 }

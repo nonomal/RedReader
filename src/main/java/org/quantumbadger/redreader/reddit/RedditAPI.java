@@ -19,10 +19,12 @@ package org.quantumbadger.redreader.reddit;
 
 import android.content.Context;
 import android.net.Uri;
+
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
 import org.quantumbadger.redreader.account.RedditAccount;
 import org.quantumbadger.redreader.activities.BugReportActivity;
 import org.quantumbadger.redreader.cache.CacheManager;
@@ -40,12 +42,13 @@ import org.quantumbadger.redreader.common.PrefsUtility;
 import org.quantumbadger.redreader.common.Priority;
 import org.quantumbadger.redreader.common.RRError;
 import org.quantumbadger.redreader.common.TimestampBound;
+import org.quantumbadger.redreader.common.UriString;
 import org.quantumbadger.redreader.common.datastream.SeekableInputStream;
 import org.quantumbadger.redreader.common.time.TimeDuration;
 import org.quantumbadger.redreader.common.time.TimestampUTC;
 import org.quantumbadger.redreader.http.FailedRequestBody;
 import org.quantumbadger.redreader.http.PostField;
-import org.quantumbadger.redreader.http.body.HTTPRequestBodyPostFields;
+import org.quantumbadger.redreader.http.body.HTTPRequestBody;
 import org.quantumbadger.redreader.io.RequestResponseHandler;
 import org.quantumbadger.redreader.jsonwrap.JsonArray;
 import org.quantumbadger.redreader.jsonwrap.JsonString;
@@ -59,7 +62,6 @@ import org.quantumbadger.redreader.reddit.things.SubredditCanonicalId;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -150,6 +152,12 @@ public final class RedditAPI {
 		}
 	}
 
+	public interface BlockUserResponseHandler {
+		void onSuccess();
+		void onBlockUserPermissionDenied();
+		void onFailure(@NonNull final RRError error);
+	}
+
 	public interface FlairSelectorResponseHandler {
 
 		void onSuccess(@NonNull Collection<RedditFlairChoice> choices);
@@ -171,7 +179,7 @@ public final class RedditAPI {
 		final LinkedList<PostField> postFields = new LinkedList<>();
 		postFields.add(new PostField("is_newlink", "true"));
 
-		final URI apiUrl = Constants.Reddit.getUri(subreddit + "/api/flairselector");
+		final UriString apiUrl = Constants.Reddit.getUri(subreddit + "/api/flairselector");
 
 		cm.makeRequest(createPostRequest(
 				apiUrl,
@@ -224,10 +232,10 @@ public final class RedditAPI {
 						if(choices.isEmpty()) {
 							responseHandler.onFailure(General.getGeneralErrorForFailure(
 									context,
-									CacheRequest.REQUEST_FAILURE_PARSE,
+									CacheRequest.RequestFailureType.PARSE,
 									new RuntimeException(),
 									null,
-									apiUrl.toString(),
+									apiUrl,
 									Optional.of(new FailedRequestBody(result))));
 							return;
 						}
@@ -510,7 +518,7 @@ public final class RedditAPI {
 		final LinkedList<PostField> postFields = new LinkedList<>();
 		postFields.add(new PostField("id", idAndType.getValue()));
 
-		final URI url = prepareActionUri(action, postFields);
+		final UriString url = prepareActionUri(action, postFields);
 
 		cm.makeRequest(createPostRequest(
 				url,
@@ -520,7 +528,7 @@ public final class RedditAPI {
 				new GenericResponseHandler(responseHandler)));
 	}
 
-	private static URI prepareActionUri(
+	private static UriString prepareActionUri(
 			final @RedditAction int action,
 			final LinkedList<PostField> postFields) {
 		switch(action) {
@@ -581,7 +589,7 @@ public final class RedditAPI {
 
 						postFields.add(new PostField("sr", subreddit.name));
 
-						final URI url = subscriptionPrepareActionUri(action, postFields);
+						final UriString url = subscriptionPrepareActionUri(action, postFields);
 
 						cm.makeRequest(createPostRequest(
 								url,
@@ -594,7 +602,7 @@ public final class RedditAPI {
 				null);
 	}
 
-	private static URI subscriptionPrepareActionUri(
+	private static UriString subscriptionPrepareActionUri(
 			final @RedditSubredditAction int action,
 			final LinkedList<PostField> postFields) {
 		switch(action) {
@@ -619,7 +627,7 @@ public final class RedditAPI {
 			final DownloadStrategy downloadStrategy,
 			final Context context) {
 
-		final URI uri = Constants.Reddit.getUri("/user/" + usernameToGet + "/about.json");
+		final UriString uri = Constants.Reddit.getUri("/user/" + usernameToGet + "/about.json");
 
 		cm.makeRequest(createGetRequest(
 				uri,
@@ -645,10 +653,10 @@ public final class RedditAPI {
 							// TODO look for error
 							responseHandler.notifyFailure(General.getGeneralErrorForFailure(
 									context,
-									CacheRequest.REQUEST_FAILURE_PARSE,
+									CacheRequest.RequestFailureType.PARSE,
 									t,
 									null,
-									uri.toString(),
+									uri,
 									Optional.of(new FailedRequestBody(result))));
 						}
 					}
@@ -658,6 +666,68 @@ public final class RedditAPI {
 						responseHandler.notifyFailure(error);
 					}
 				}));
+	}
+
+	public static void unblockUser(
+			final CacheManager cm,
+			final String usernameToUnblock,
+			final String currentUserFullname,
+			final APIResponseHandler.ActionResponseHandler responseHandler,
+			final RedditAccount user,
+			final Context context
+	) {
+		final LinkedList<PostField> postFields = new LinkedList<>();
+		postFields.add(new PostField("name", usernameToUnblock));
+		postFields.add(new PostField("container", currentUserFullname));
+		postFields.add(new PostField("type", "enemy"));
+
+		cm.makeRequest(createPostRequest(
+				Constants.Reddit.getUri("/api/unfriend"),
+				user,
+				postFields,
+				context,
+				new GenericResponseHandler(responseHandler)));
+	}
+
+	public static void blockUser(
+			final CacheManager cm,
+			final String usernameToBlock,
+			final BlockUserResponseHandler responseHandler,
+			final RedditAccount user,
+			final Context context
+	) {
+		final LinkedList<PostField> postFields = new LinkedList<>();
+		postFields.add(new PostField("name", usernameToBlock));
+		postFields.add(new PostField("api_type", "json"));
+
+		cm.makeRequest(createPostRequestUnprocessedResponse(
+				Constants.Reddit.getUri("/api/block_user"),
+				user,
+				postFields,
+				context,
+				new CacheRequestCallbacks() {
+					@Override
+					public void onFailure(@NonNull final RRError error) {
+						// we upgraded the OAuth scope to include account,
+						// so check for missing permission
+						if (error.httpStatus != null && error.httpStatus == 403) {
+							responseHandler.onBlockUserPermissionDenied();
+						} else {
+							responseHandler.onFailure(error);
+						}
+					}
+
+					@Override
+					public void onDataStreamComplete(
+							@NonNull final GenericFactory<SeekableInputStream, IOException> stream,
+							final TimestampUTC timestamp,
+							@NonNull final UUID session,
+							final boolean fromCache,
+							@Nullable final String mimetype) {
+						responseHandler.onSuccess();
+					}
+				}
+		));
 	}
 
 	public static void sendReplies(
@@ -696,7 +766,7 @@ public final class RedditAPI {
 
 		after.apply(value -> builder.appendQueryParameter("after", value));
 
-		final URI uri = Objects.requireNonNull(General.uriFromString(builder.build().toString()));
+		final UriString uri = UriString.from(builder.build());
 
 		requestSubredditList(
 				cm,
@@ -731,7 +801,7 @@ public final class RedditAPI {
 
 		after.apply(value -> builder.appendQueryParameter("after", value));
 
-		final URI uri = Objects.requireNonNull(General.uriFromString(builder.build().toString()));
+		final UriString uri = UriString.from(builder.build());
 
 		requestSubredditList(
 				cm,
@@ -773,7 +843,7 @@ public final class RedditAPI {
 
 		after.apply(value -> builder.appendQueryParameter("after", value));
 
-		final URI uri = Objects.requireNonNull(General.uriFromString(builder.build().toString()));
+		final UriString uri = UriString.from(builder.build());
 
 		requestSubredditList(
 				cm,
@@ -826,7 +896,7 @@ public final class RedditAPI {
 
 	public static void requestSubredditList(
 			@NonNull final CacheManager cm,
-			@NonNull final URI uri,
+			@NonNull final UriString uri,
 			@NonNull final RedditAccount user,
 			@NonNull final Context context,
 			@NonNull final APIResponseHandler.ValueResponseHandler<
@@ -873,10 +943,10 @@ public final class RedditAPI {
 						} catch(final Exception e) {
 							onFailure(General.getGeneralErrorForFailure(
 									context,
-									CacheRequest.REQUEST_FAILURE_PARSE,
+									CacheRequest.RequestFailureType.PARSE,
 									e,
 									null,
-									uri.toString(),
+									uri,
 									Optional.of(new FailedRequestBody(result))));
 						}
 					}
@@ -991,7 +1061,7 @@ public final class RedditAPI {
 
 	@NonNull
 	private static CacheRequest createPostRequest(
-			@NonNull final URI url,
+			@NonNull final UriString url,
 			@NonNull final RedditAccount user,
 			@NonNull final List<PostField> postFields,
 			@NonNull final Context context,
@@ -1007,7 +1077,7 @@ public final class RedditAPI {
 
 	@NonNull
 	private static CacheRequest createPostRequestUnprocessedResponse(
-			@NonNull final URI url,
+			@NonNull final UriString url,
 			@NonNull final RedditAccount user,
 			@NonNull final List<PostField> postFields,
 			@NonNull final Context context,
@@ -1020,15 +1090,15 @@ public final class RedditAPI {
 				new Priority(Constants.Priority.API_ACTION),
 				DownloadStrategyAlways.INSTANCE,
 				Constants.FileType.NOCACHE,
-				CacheRequest.DOWNLOAD_QUEUE_REDDIT_API,
-				new HTTPRequestBodyPostFields(postFields),
+				CacheRequest.DownloadQueueType.REDDIT_API,
+				new HTTPRequestBody.PostFields(postFields),
 				context,
 				callbacks);
 	}
 
 	@NonNull
 	private static CacheRequest createGetRequest(
-			@NonNull final URI url,
+			@NonNull final UriString url,
 			@NonNull final RedditAccount user,
 			@NonNull final Priority priority,
 			final int fileType,
@@ -1043,7 +1113,7 @@ public final class RedditAPI {
 				priority,
 				downloadStrategy,
 				fileType,
-				CacheRequest.DOWNLOAD_QUEUE_REDDIT_API,
+				CacheRequest.DownloadQueueType.REDDIT_API,
 				null,
 				context,
 				new CacheRequestJSONParser(context, handler));

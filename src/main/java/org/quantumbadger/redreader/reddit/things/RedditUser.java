@@ -19,10 +19,13 @@ package org.quantumbadger.redreader.reddit.things;
 
 import android.os.Parcel;
 import android.os.Parcelable;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
 import org.apache.commons.text.StringEscapeUtils;
 import org.quantumbadger.redreader.common.ParcelUtils;
+import org.quantumbadger.redreader.common.UriString;
 import org.quantumbadger.redreader.jsonwrap.JsonObject;
 
 public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
@@ -40,6 +43,7 @@ public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
 	@Nullable public Boolean is_mod;
 	@Nullable public Boolean is_suspended;
 	@Nullable public Boolean over_18;
+	@Nullable public Boolean is_blocked;
 
 	@Nullable public String id;
 	@NonNull public String name;
@@ -82,6 +86,7 @@ public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
 		is_gold = in.readInt() == 1;
 		is_mod = in.readInt() == 1;
 		over_18 = in.readInt() == 1;
+		is_blocked = in.readInt() == 1;
 
 		id = in.readString();
 		name = in.readString();
@@ -115,6 +120,7 @@ public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
 		parcel.writeInt(is_gold ? 1 : 0);
 		parcel.writeInt(is_mod ? 1 : 0);
 		parcel.writeInt(over_18 ? 1 : 0);
+		parcel.writeInt(is_blocked ? 1 : 0);
 
 		parcel.writeString(id);
 		parcel.writeString(name);
@@ -124,11 +130,11 @@ public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
 	}
 
 	@Nullable
-	public String getIconUrl() {
+	public UriString getIconUrl() {
 		if(icon_img == null) {
 			return null;
 		} else {
-			return StringEscapeUtils.unescapeHtml4(icon_img);
+			return new UriString(StringEscapeUtils.unescapeHtml4(icon_img));
 		}
 	}
 
@@ -144,4 +150,7 @@ public class RedditUser implements Parcelable, JsonObject.JsonDeserializable {
 			return new RedditUser[size];
 		}
 	};
+	public String fullname() {
+		return String.format("%s_%s", RedditThing.KIND_USER, id);
+	}
 }
